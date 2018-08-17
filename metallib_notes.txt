@@ -1,0 +1,26 @@
+main header:
+char magic[4] = "MTLB"
+
+0x10: int32 = size of file
+
+0x18: offset of contents table
+
+0x48: offset of 1st bitcode
+
+contents table:
+
+uint32_t number of entries
+
+each entry:
+
+uint32_t size of entry
+
+starts at 0x60
+
+char segmentType[4] = "NAME"
+uint16_t length;
+char payload[];
+
+Except ENDT: has no length.
+
+MDSZ: uint64_t of size of bitcode
