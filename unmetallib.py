@@ -6,10 +6,43 @@ def u32(a, i):
 def u16(a, i):
 	return a[i] | a[i+1] << 8
 
+def m_u32(a, i):
+	return a[i+3] | a[i+2] << 8 | a[i+1] << 16 | a[i] << 24
+
 with open(sys.argv[1], "rb") as infile:
 	indata = infile.read()
 
-dir_off = u32(indata, 0x18)
+# Check file magic; either MTLB (MetalLib) or 0xCAFEBABE (Mach-O multi-architecture)
+magic = m_u32(indata, 0x0);
+
+cur_macho_off = 0;
+
+if magic == 0xCAFEBABE:
+	num_binaries = m_u32(indata, 0x4)
+
+	cur_macho_off = 0x8;
+	for i in range(num_binaries):
+		cpu_type = u32(indata, cur_macho_off) >> 24
+		cur_macho_off += 8 # Skip CPU subtype
+
+		file_offset = m_u32(indata, cur_macho_off)
+		cur_macho_off += 4
+
+		binary_size = m_u32(indata, cur_macho_off)
+		cur_macho_off += 8; # Skip section alignment
+
+		if cpu_type == 23:
+			cur_macho_off = file_offset
+			break
+		elif cpu_type == 19 or cpu_type == 20 or cpu_type == 21:
+			found_gpu_code = True
+
+		if i == num_binaries - 1:
+			if found_gpu_code:
+				print("At least one GPU binary is present in the input file, but no MetalLib binaries were found, so there is nothing to extract.")
+			exit(-1)
+
+dir_off = cur_macho_off + u32(indata, cur_macho_off + 0x18)
 
 num_entries = u32(indata, dir_off)
 
@@ -34,10 +67,10 @@ for i in range(num_entries):
 	entries.append((entry_name, entry_size))
 print(entries)
 
-payload_off = u32(indata, 0x48)
+payload_off = u32(indata, cur_macho_off + 0x48)
 
 for entry in entries:
-	outdata = indata[payload_off:payload_off + entry[1]]
+	outdata = indata[cur_macho_off + payload_off:cur_macho_off + payload_off + entry[1]]
 	with open("out_" + entry[0] + ".air", "wb") as outfile:
 		outfile.write(outdata)
 	payload_off += entry[1]
